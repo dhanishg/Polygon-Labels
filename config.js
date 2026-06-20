@@ -8,7 +8,7 @@ window.UNIT_CONFIG = {
   /* 1) The address where these pages are hosted (no trailing slash).
         The QR code links here. Fill this in AFTER you deploy (see SETUP.md).
         Example: "https://polygon-unit.netlify.app"                         */
-  BASE_URL: "https://dhanishg.github.io/Polygon-Labels/",
+  BASE_URL: "https://dhanishg.github.io/Polygon-Labels",
 
   /* 2) The Google Apps Script web-app URL (the database).
         You get this in SETUP.md after deploying APPS_SCRIPT.gs.
