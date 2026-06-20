@@ -56,13 +56,14 @@
               vertical-align:-0.6mm}
   #label .l-checks b{font-weight:700;margin-right:1mm}
 
-  /* ---- Print: only the label, exact label size ---- */
+  /* ---- Print: only the label. Page size + rotation are injected at
+          print time (see doPrint) so the same label can print landscape
+          or rotated 90° to match the printer's label feed. ---- */
   @media print{
-    @page{ size:90mm 60mm; margin:0; }
     body{background:#fff;padding:0;display:block}
     .wrap, .noprint{ display:none !important; }
     #print-area{ display:block !important; }
-    #label{ width:90mm;height:60mm;border:0;page-break-after:always; }
+    #print-area #label{ border:0 !important; }
   }
   #print-area{display:none}
 </style>
@@ -82,6 +83,10 @@
       <select id="product"></select>
       <button id="printBtn">Generate &amp; Print Label</button>
       <div id="status" class="status"></div>
+      <label style="font-weight:400;font-size:13px;margin-top:14px;display:flex;align-items:center;gap:8px;cursor:pointer">
+        <input type="checkbox" id="rotate" style="width:16px;height:16px">
+        Labels printing sideways? Tick to rotate 90°
+      </label>
       <div class="links">
         <a href="dashboard.html">📊 Dashboard</a>
         <a href="#" id="reprint">🔁 Re-print last</a>
@@ -180,9 +185,33 @@
     }).then(function(r){return r.json();});
   }
 
+  var rotateBox=document.getElementById('rotate');
+  // remember the operator's choice on this PC
+  rotateBox.checked = localStorage.getItem('polygon_rotate')==='1';
+  rotateBox.addEventListener('change', function(){
+    localStorage.setItem('polygon_rotate', rotateBox.checked?'1':'0');
+  });
+
+  function buildPrintStyle(){
+    var W=CFG.LABEL_W||'90mm', H=CFG.LABEL_H||'60mm';
+    var css;
+    if(rotateBox.checked){
+      // Portrait-fed labels: rotate the landscape label 90° to come out straight
+      css='@page{size:'+H+' '+W+';margin:0}'+
+          '#print-area{position:relative;width:'+H+';height:'+W+'}'+
+          '#print-area #label{position:absolute;top:0;left:0;width:'+W+';height:'+H+';'+
+          'transform-origin:top left;transform:translateX('+H+') rotate(90deg)}';
+    } else {
+      css='@page{size:'+W+' '+H+';margin:0}'+
+          '#print-area #label{width:'+W+';height:'+H+'}';
+    }
+    var s=document.getElementById('dyn-print');
+    if(!s){ s=document.createElement('style'); s.id='dyn-print'; s.media='print'; document.head.appendChild(s); }
+    s.textContent=css;
+  }
+
   function doPrint(rec){
-    document.getElementById('print-area').innerHTML='<div id="label-print"></div>';
-    // reuse same markup in the hidden print area
+    buildPrintStyle();
     var pa=document.getElementById('print-area');
     pa.innerHTML='';
     var clone=label.cloneNode(true);
