@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Polygon — Print Label</title>
+<script src="js/qrcode.min.js"></script>
+<script src="config.js"></script>
+<style>
+  :root{
+    --ink:#14281d; --bg:#f4f1ea; --card:#fff; --line:#d9d3c5;
+    --green:#1f6b3b; --green-d:#16502c; --muted:#6b6457;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:system-ui,Segoe UI,Roboto,Arial,sans-serif;
+       background:var(--bg);color:var(--ink);display:flex;justify-content:center;padding:24px}
+  .wrap{width:100%;max-width:760px}
+  h1{font-size:20px;margin:0 0 4px}
+  .sub{color:var(--muted);margin:0 0 20px;font-size:14px}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+  @media(max-width:640px){.grid{grid-template-columns:1fr}}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px}
+  label{display:block;font-weight:600;font-size:13px;margin:0 0 6px}
+  select{width:100%;padding:12px;font-size:16px;border:1px solid var(--line);border-radius:10px;background:#fff}
+  button{width:100%;margin-top:18px;padding:16px;font-size:18px;font-weight:700;border:0;border-radius:10px;
+         background:var(--green);color:#fff;cursor:pointer}
+  button:hover{background:var(--green-d)}
+  button:disabled{opacity:.5;cursor:default}
+  .links{margin-top:18px;font-size:13px}
+  .links a{color:var(--green);font-weight:600;text-decoration:none;margin-right:14px}
+  .status{margin-top:12px;font-size:13px;min-height:18px}
+  .status.ok{color:var(--green)} .status.err{color:#b42318}
+  .warn{background:#fff7e6;border:1px solid #f0d9a8;color:#7a5b00;padding:10px 12px;border-radius:10px;
+        font-size:13px;margin-bottom:18px}
+
+  /* ---- The label (preview + print share these styles) ---- */
+  .preview-head{font-weight:600;font-size:13px;margin:0 0 10px;color:var(--muted)}
+  #label{
+    width:90mm;height:60mm;background:#fff;color:#000;border:1px dashed #bbb;
+    padding:3mm 3.5mm;display:flex;flex-direction:column;
+    font-family:Arial,Helvetica,sans-serif;overflow:hidden;
+  }
+  #label .l-head{display:flex;justify-content:space-between;align-items:center;
+                 font-size:9pt;font-weight:700;letter-spacing:.5px;border-bottom:1.5px solid #000;padding-bottom:1mm}
+  #label .l-body{display:flex;gap:3mm;flex:1;padding-top:1.5mm}
+  #label .l-left{flex:1;display:flex;flex-direction:column}
+  #label .l-product{font-size:15pt;font-weight:800;line-height:1.05;margin-bottom:1mm}
+  #label .l-meta{font-size:8pt;line-height:1.45}
+  #label .l-id{font-family:"Courier New",monospace;font-size:7pt;word-break:break-all;margin-top:auto}
+  #label .l-qr{width:26mm;height:26mm;flex:none}
+  #label .l-qr svg{width:100%;height:100%;display:block}
+  #label .l-checks{border-top:1px solid #000;margin-top:1mm;padding-top:1mm;
+                   display:flex;justify-content:space-between;font-size:8pt}
+  #label .l-checks .row{display:flex;gap:3mm}
+  #label .box{display:inline-block;width:3.2mm;height:3.2mm;border:1.4px solid #000;margin-right:1mm;
+              vertical-align:-0.6mm}
+  #label .l-checks b{font-weight:700;margin-right:1mm}
+
+  /* ---- Print: only the label, exact label size ---- */
+  @media print{
+    @page{ size:90mm 60mm; margin:0; }
+    body{background:#fff;padding:0;display:block}
+    .wrap, .noprint{ display:none !important; }
+    #print-area{ display:block !important; }
+    #label{ width:90mm;height:60mm;border:0;page-break-after:always; }
+  }
+  #print-area{display:none}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <h1>Polygon — Label Printer</h1>
+  <p class="sub">Pick a product and print a 90 × 60 mm label.</p>
+
+  <div id="cfgwarn" class="warn" style="display:none"></div>
+
+  <div class="grid">
+    <!-- Controls -->
+    <div class="card noprint">
+      <label for="product">Product</label>
+      <select id="product"></select>
+      <button id="printBtn">Generate &amp; Print Label</button>
+      <div id="status" class="status"></div>
+      <div class="links">
+        <a href="dashboard.html">📊 Dashboard</a>
+        <a href="#" id="reprint">🔁 Re-print last</a>
+      </div>
+    </div>
+
+    <!-- Live preview -->
+    <div class="card noprint">
+      <p class="preview-head">Label preview</p>
+      <div id="label"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Clone target used only while printing -->
+<div id="print-area"></div>
+
+<script>
+(function(){
+  var CFG = window.UNIT_CONFIG || {};
+  var PRODUCTS = CFG.PRODUCTS || [];
+  var sel = document.getElementById('product');
+  var label = document.getElementById('label');
+  var statusEl = document.getElementById('status');
+  var printBtn = document.getElementById('printBtn');
+  var lastRecord = null;
+
+  // Warn if not configured yet
+  if(!CFG.API_URL || !CFG.BASE_URL){
+    var w = document.getElementById('cfgwarn');
+    w.style.display='block';
+    w.innerHTML = 'Setup not finished — open <b>config.js</b> and fill in '+
+      (!CFG.BASE_URL?'<b>BASE_URL</b> ':'')+(!CFG.API_URL?'<b>API_URL</b> ':'')+
+      '. You can still preview labels, but they won\'t save or scan until this is set. See <b>SETUP.md</b>.';
+  }
+
+  // Fill dropdown
+  PRODUCTS.forEach(function(p,i){
+    var o=document.createElement('option');
+    o.value=i; o.textContent=p.name; sel.appendChild(o);
+  });
+
+  function pad(n){return n<10?'0'+n:''+n;}
+  function rand3(){return Math.floor(Math.random()*900+100);}
+
+  function build(product){
+    var now=new Date();
+    var Y=now.getFullYear(), M=pad(now.getMonth()+1), D=pad(now.getDate());
+    var h=pad(now.getHours()), m=pad(now.getMinutes()), s=pad(now.getSeconds());
+    var date=Y+'-'+M+'-'+D, time=h+':'+m;
+    var id=product.code+'-'+Y+M+D+'-'+h+m+s+'-'+rand3();
+    return { id:id, product:product.name, productCode:product.code,
+             date:date, time:time, iso:now.toISOString() };
+  }
+
+  function qrSvg(rec){
+    var url=(CFG.BASE_URL||'')+'/label.html?id='+encodeURIComponent(rec.id)+
+            '&p='+encodeURIComponent(rec.productCode)+'&t='+encodeURIComponent(rec.date+' '+rec.time);
+    var qr=qrcode(0,'M');          // type 0 = auto-size, M = medium error correction
+    qr.addData(url); qr.make();
+    return qr.createSvgTag({cellSize:4,margin:0,scalable:true});
+  }
+
+  function render(rec){
+    label.innerHTML =
+      '<div class="l-head"><span>POLYGON PAPER TECH</span><span>'+rec.date+'</span></div>'+
+      '<div class="l-body">'+
+        '<div class="l-left">'+
+          '<div class="l-product">'+rec.product+'</div>'+
+          '<div class="l-meta">Date: '+rec.date+'<br>Time: '+rec.time+'</div>'+
+          '<div class="l-id">'+rec.id+'</div>'+
+        '</div>'+
+        '<div class="l-qr">'+qrSvg(rec)+'</div>'+
+      '</div>'+
+      '<div class="l-checks">'+
+        '<div class="row"><b>Mould:</b><span><span class="box"></span>Mould</span>'+
+          '<span><span class="box"></span>Other</span></div>'+
+        '<div class="row"><b>Baking:</b><span><span class="box"></span>Needs</span>'+
+          '<span><span class="box"></span>No baking</span></div>'+
+      '</div>';
+  }
+
+  // Live preview of current selection (with a fresh timestamp each time)
+  function preview(){ render(build(PRODUCTS[sel.value])); }
+  sel.addEventListener('change', preview);
+
+  function setStatus(msg,kind){ statusEl.textContent=msg; statusEl.className='status '+(kind||''); }
+
+  function save(rec){
+    if(!CFG.API_URL) return Promise.resolve({skipped:true});
+    // text/plain avoids a CORS preflight against Apps Script
+    return fetch(CFG.API_URL,{
+      method:'POST',
+      headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body:JSON.stringify(Object.assign({action:'save'},rec))
+    }).then(function(r){return r.json();});
+  }
+
+  function doPrint(rec){
+    document.getElementById('print-area').innerHTML='<div id="label-print"></div>';
+    // reuse same markup in the hidden print area
+    var pa=document.getElementById('print-area');
+    pa.innerHTML='';
+    var clone=label.cloneNode(true);
+    clone.id='label'; clone.style.border='0';
+    pa.appendChild(clone);
+    window.print();
+  }
+
+  printBtn.addEventListener('click', function(){
+    var rec=build(PRODUCTS[sel.value]);
+    render(rec); lastRecord=rec;
+    printBtn.disabled=true; setStatus('Saving…');
+    save(rec).then(function(res){
+      if(res && res.skipped){ setStatus('Printed (not saved — finish setup to log it).','err'); }
+      else if(res && res.ok){ setStatus('Saved ✓  ID '+rec.id,'ok'); }
+      else { setStatus('Saved? Unexpected reply. Printing anyway.','err'); }
+    }).catch(function(){
+      setStatus('Could not reach database — printed but NOT saved.','err');
+    }).then(function(){
+      printBtn.disabled=false;
+      doPrint(rec);
+    });
+  });
+
+  document.getElementById('reprint').addEventListener('click', function(e){
+    e.preventDefault();
+    if(!lastRecord){ setStatus('Nothing printed yet this session.','err'); return; }
+    render(lastRecord); doPrint(lastRecord);
+  });
+
+  preview(); // initial
+})();
+</script>
+</body>
+</html>

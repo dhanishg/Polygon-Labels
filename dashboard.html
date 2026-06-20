@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Polygon — Label Dashboard</title>
+<script src="config.js"></script>
+<style>
+  :root{--ink:#14281d;--bg:#f4f1ea;--card:#fff;--line:#d9d3c5;--green:#1f6b3b;--green-l:#cfe7d8;--muted:#6b6457}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:system-ui,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);color:var(--ink);
+       display:flex;justify-content:center;padding:24px}
+  .wrap{width:100%;max-width:820px}
+  h1{font-size:22px;margin:0 0 4px}
+  .sub{color:var(--muted);margin:0 0 20px;font-size:14px}
+  .bar{display:flex;gap:12px;flex-wrap:wrap;align-items:end;margin-bottom:20px}
+  .field label{display:block;font-size:12px;font-weight:600;margin-bottom:4px;color:var(--muted)}
+  .field input{padding:9px;border:1px solid var(--line);border-radius:8px;font-size:14px}
+  button{padding:10px 16px;border:0;border-radius:8px;background:var(--green);color:#fff;font-weight:700;cursor:pointer}
+  a.back{color:var(--green);font-weight:600;text-decoration:none;font-size:14px;margin-left:auto;align-self:center}
+  .cards{display:flex;gap:16px;margin-bottom:24px;flex-wrap:wrap}
+  .stat{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px 22px;flex:1;min-width:140px}
+  .stat .n{font-size:32px;font-weight:800;color:var(--green)}
+  .stat .t{font-size:13px;color:var(--muted)}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px}
+  table{width:100%;border-collapse:collapse}
+  th,td{text-align:left;padding:10px 8px;font-size:14px;border-bottom:1px solid var(--line)}
+  th{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.4px}
+  td.count{font-weight:700;text-align:right;width:60px}
+  td.barcell{width:55%}
+  .gbar{height:14px;background:var(--green);border-radius:4px;min-width:2px}
+  .msg{color:var(--muted);font-size:14px;padding:8px 0}
+  .err{color:#b42318}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Label Dashboard</h1>
+  <p class="sub">How many labels were created, by day.</p>
+
+  <div class="bar">
+    <div class="field"><label>From</label><input type="date" id="from"></div>
+    <div class="field"><label>To</label><input type="date" id="to"></div>
+    <button id="apply">Apply</button>
+    <a class="back" href="print.html">← Back to printer</a>
+  </div>
+
+  <div class="cards">
+    <div class="stat"><div class="n" id="total">—</div><div class="t">Total in range</div></div>
+    <div class="stat"><div class="n" id="days">—</div><div class="t">Days with prints</div></div>
+    <div class="stat"><div class="n" id="busiest">—</div><div class="t">Busiest day</div></div>
+  </div>
+
+  <div class="card">
+    <table>
+      <thead><tr><th>Date</th><th class="barcell"></th><th class="count">Count</th></tr></thead>
+      <tbody id="rows"><tr><td colspan="3" class="msg">Loading…</td></tr></tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+(function(){
+  var CFG=window.UNIT_CONFIG||{};
+  var rowsEl=document.getElementById('rows');
+  var allStats={};
+
+  function msg(text,cls){ rowsEl.innerHTML='<tr><td colspan="3" class="msg '+(cls||'')+'">'+text+'</td></tr>'; }
+
+  if(!CFG.API_URL){
+    msg('Setup not finished — fill in API_URL in <b>config.js</b> to see live data. (See SETUP.md.)','err');
+    return;
+  }
+
+  function render(){
+    var from=document.getElementById('from').value;
+    var to=document.getElementById('to').value;
+    var dates=Object.keys(allStats).filter(function(d){
+      if(from && d<from) return false; if(to && d>to) return false; return true;
+    }).sort();
+
+    var total=0,max=0,busiest='—';
+    dates.forEach(function(d){ var c=allStats[d]; total+=c; if(c>max){max=c;busiest=d;} });
+
+    document.getElementById('total').textContent=total;
+    document.getElementById('days').textContent=dates.length;
+    document.getElementById('busiest').textContent=busiest==='—'?'—':busiest+' ('+max+')';
+
+    if(!dates.length){ msg('No labels in this range.'); return; }
+    rowsEl.innerHTML='';
+    dates.slice().reverse().forEach(function(d){
+      var c=allStats[d], w=max?Math.round(c/max*100):0;
+      var tr=document.createElement('tr');
+      tr.innerHTML='<td>'+d+'</td>'+
+        '<td class="barcell"><div class="gbar" style="width:'+w+'%"></div></td>'+
+        '<td class="count">'+c+'</td>';
+      rowsEl.appendChild(tr);
+    });
+  }
+
+  document.getElementById('apply').addEventListener('click',render);
+
+  fetch(CFG.API_URL+'?action=stats')
+    .then(function(r){return r.json();})
+    .then(function(data){
+      allStats=(data&&data.stats)?data.stats:(data||{});
+      render();
+    })
+    .catch(function(){ msg('Could not reach the database. Check your internet and API_URL.','err'); });
+})();
+</script>
+</body>
+</html>

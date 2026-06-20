@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Polygon — Label Details</title>
+<script src="config.js"></script>
+<style>
+  :root{--ink:#14281d;--bg:#f4f1ea;--card:#fff;--line:#d9d3c5;--green:#1f6b3b;--muted:#6b6457}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:system-ui,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);
+       color:var(--ink);min-height:100vh;display:flex;justify-content:center;align-items:flex-start;padding:20px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;width:100%;max-width:440px;
+        padding:24px;box-shadow:0 6px 24px rgba(0,0,0,.06)}
+  .brand{font-size:12px;font-weight:700;letter-spacing:1px;color:var(--green);margin:0 0 14px}
+  h1{font-size:26px;margin:0 0 18px;line-height:1.1}
+  .row{display:flex;justify-content:space-between;padding:12px 0;border-top:1px solid var(--line);font-size:15px}
+  .row .k{color:var(--muted)} .row .v{font-weight:700;text-align:right}
+  .id{font-family:"Courier New",monospace;font-size:12px;word-break:break-all}
+  .msg{font-size:14px;color:var(--muted);padding:8px 0}
+  .badge{display:inline-block;font-size:12px;font-weight:700;padding:4px 10px;border-radius:999px;margin-bottom:14px}
+  .badge.live{background:#e7f4ec;color:var(--green)}
+  .badge.offline{background:#fdeccd;color:#7a5b00}
+  .badge.missing{background:#fde7e7;color:#b42318}
+  a.back{display:inline-block;margin-top:18px;color:var(--green);font-weight:600;text-decoration:none;font-size:14px}
+</style>
+</head>
+<body>
+<div class="card">
+  <p class="brand">POLYGON PAPER TECH</p>
+  <div id="content"><p class="msg">Loading…</p></div>
+</div>
+
+<script>
+(function(){
+  var CFG=window.UNIT_CONFIG||{};
+  var q=new URLSearchParams(location.search);
+  var id=q.get('id'), pCode=q.get('p'), t=q.get('t');
+  var content=document.getElementById('content');
+
+  function esc(s){var d=document.createElement('div');d.textContent=s==null?'':s;return d.innerHTML;}
+
+  function nameFor(code){
+    var list=CFG.PRODUCTS||[];
+    for(var i=0;i<list.length;i++){if(list[i].code===code)return list[i].name;}
+    return code||'—';
+  }
+
+  function show(rec,mode){
+    var badge=mode==='live'?'<span class="badge live">● Verified in database</span>'
+            :mode==='offline'?'<span class="badge offline">● Offline — from code, not confirmed</span>'
+            :'<span class="badge missing">● Not found in database</span>';
+    var dt=(rec.date||'')+(rec.time?' '+rec.time:'');
+    content.innerHTML=
+      badge+
+      '<h1>'+esc(rec.product||'Unknown product')+'</h1>'+
+      '<div class="row"><span class="k">Date &amp; time</span><span class="v">'+esc(dt||'—')+'</span></div>'+
+      '<div class="row"><span class="k">Product code</span><span class="v">'+esc(rec.productCode||'—')+'</span></div>'+
+      '<div class="row"><span class="k">Label ID</span><span class="v id">'+esc(rec.id||id||'—')+'</span></div>'+
+      '<a class="back" href="dashboard.html">View dashboard →</a>';
+  }
+
+  if(!id){
+    content.innerHTML='<p class="msg">No label ID in the link. Scan a Polygon label QR code to see its details.</p>';
+    return;
+  }
+
+  // Fallback record built purely from the QR's own parameters (works with no internet)
+  var fallback={ id:id, productCode:pCode||'', product:nameFor(pCode),
+                 date:(t||'').split(' ')[0]||'', time:(t||'').split(' ')[1]||'' };
+
+  if(!CFG.API_URL){ show(fallback,'offline'); return; }
+
+  fetch(CFG.API_URL+'?id='+encodeURIComponent(id))
+    .then(function(r){return r.json();})
+    .then(function(rec){
+      if(rec && rec.found){ show(rec,'live'); }
+      else { show(fallback,'missing'); }
+    })
+    .catch(function(){ show(fallback,'offline'); });
+})();
+</script>
+</body>
+</html>
